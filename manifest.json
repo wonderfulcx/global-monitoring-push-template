@@ -2,7 +2,7 @@
   "schema_version": 1,
   "publisher_id": "wonderful",
   "slug": "wonderful/global-monitoring-push-template",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "title": "Global Monitoring — Push Template",
   "short_description": "Pub/sub push template: hourly cron reads this tenant's own status and pushes it to germany-internal's global-monitoring dashboard, instead of the dashboard pulling with a read key.",
   "category": "Observability",

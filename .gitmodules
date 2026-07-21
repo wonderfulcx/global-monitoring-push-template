@@ -1,0 +1,3 @@
+[submodule "shared_lib"]
+	path = shared_lib
+	url = https://github.com/wonderfulcx/global-monitoring-core
