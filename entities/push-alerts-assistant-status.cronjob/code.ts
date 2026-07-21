@@ -8,18 +8,17 @@
 // submodule at the marker below — one source of truth with the hub, no copied
 // helpers. Edit it in global-monitoring-core, not here.
 //
-// Payload is currently a thin snapshot (interactions/issues/alerts + a rolling
-// "this week"). To make pushed tenants as rich + windowed as pulled ones, this
-// is a small change: call the shared `fetchTenantStatus` per preset window and
-// push the map (Pattern A) — deferred pending that decision.
+// Pattern A: push the RICH, windowed payload so pushed tenants are as
+// complete as pulled ones. For each preset window it runs the shared
+// `fetchTenantStatus` (same code path the hub uses) and pushes a map keyed
+// by range. The consumer picks windows[selectedRange] — no live re-query of
+// this tenant, and no feature loss vs. pull.
 //
 // Not hardcoded to one tenant: tenant_label / self_api_url / collect URL are
 // global variables, so this same plugin installs on any pushing tenant with
 // config only.
 
 // @@inline-core
-
-const WEEK_MS = 7 * DAY_MS;
 
 async function userFunction(context: Context): Promise<Result> {
   const base = String(context.globals.get("self_api_url") ?? "");
@@ -40,31 +39,21 @@ async function userFunction(context: Context): Promise<Result> {
     };
   }
 
+  // One snapshot per preset window. NOTE: fetchTenantStatus re-reads the
+  // non-windowed parts (monitors, current open issues/alerts) once per
+  // window — correct but redundant; a later optimization can fetch those
+  // once and only re-run the windowed counts. Fine at hourly cadence.
   const now = Date.now();
-  const weekAgo = now - WEEK_MS;
+  const ranges: RangeKey[] = ["week", "last7", "last30", "all"];
+  const windowResults = await Promise.all(
+    ranges.map((r) => fetchTenantStatus(tenantLabel, base, apiKey, computeWindow(r, now))),
+  );
+  const windows: Record<string, unknown> = {};
+  ranges.forEach((r, i) => {
+    windows[r] = windowResults[i];
+  });
 
-  const [issues, incidents, commsTotal, issuesWeek, alertsWeek, commsWeek] = await Promise.all([
-    getList(base, apiKey, `/api/v1/issues?filters=${EMPTY_FILTERS}&limit=1000`),
-    getList(base, apiKey, `/api/v1/alerts/incidents?filters=${EMPTY_FILTERS}&limit=1000`),
-    getExactCommsCount(base, apiKey),
-    getList(base, apiKey, `/api/v1/issues?filters=${EMPTY_FILTERS}&limit=1&startDate=${weekAgo}&endDate=${now}`),
-    getList(base, apiKey, `/api/v1/alerts/incidents?filters=${EMPTY_FILTERS}&limit=1&start_date=${weekAgo}&end_date=${now}`),
-    getExactCommsCount(base, apiKey, { startDate: weekAgo, endDate: now }),
-  ]);
-
-  const openIssues = issues.items.filter(isOpenIssue).length;
-  const activeAlerts = incidents.items.filter(isOpenAlert).length;
-
-  const payload = {
-    name: tenantLabel,
-    interactions: commsTotal.count,
-    interactions_this_week: commsWeek.count,
-    open_issues: openIssues,
-    issues_opened_this_week: issuesWeek.total,
-    active_alerts: activeAlerts,
-    alerts_triggered_this_week: alertsWeek.total,
-    severity: classifySeverity(activeAlerts, openIssues),
-  };
+  const payload = { name: tenantLabel, windows };
 
   const res = await fetch(collectUrl, {
     method: "POST",
@@ -76,5 +65,5 @@ async function userFunction(context: Context): Promise<Result> {
     throw new Error(`push failed: HTTP ${res.status} ${JSON.stringify(body).slice(0, 200)}`);
   }
 
-  return { ok: true, pushed: payload, collect_response: body };
+  return { ok: true, pushed_windows: ranges, collect_response: body };
 }
