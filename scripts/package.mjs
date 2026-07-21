@@ -800,12 +800,33 @@ function detectCycle(entities) {
 // null when the entity is a single-file shape (no directory) or no sibling
 // is present, in which case the entity's inline `code` (if any) is used
 // as-is.
-function readSiblingCode(entityPath) {
+// Marker a function/cronjob code.ts can place on its own line to pull in the
+// shared read-logic from the shared_lib submodule. Replaced with the verbatim
+// contents of shared_lib/core.ts at package time (functions ship as a single
+// inlined string and can't import across files at runtime).
+const INLINE_CORE_MARKER = "// @@inline-core";
+const CORE_FILE = join(REPO_ROOT, "shared_lib", "core.ts");
+
+function inlineSharedCore(contents, entityKey) {
+  if (!contents.includes(INLINE_CORE_MARKER)) return contents;
+  if (!existsSync(CORE_FILE)) {
+    fail(
+      `${entityKey}: code references ${INLINE_CORE_MARKER} but shared_lib/core.ts is missing — ` +
+        `run \`git submodule update --init\``,
+    );
+  }
+  const core = readFileSync(CORE_FILE, "utf8");
+  // Replace the first marker occurrence; leave any others (there shouldn't be)
+  // untouched so a stray marker in a string doesn't double-inline.
+  return contents.replace(INLINE_CORE_MARKER, core);
+}
+
+function readSiblingCode(entityPath, entityKey) {
   const entityDir = dirname(join(REPO_ROOT, entityPath.split("/").join(sep)));
   for (const candidate of ["code.ts", "code.js"]) {
     const fsPath = join(entityDir, candidate);
     if (existsSync(fsPath) && statSync(fsPath).isFile()) {
-      return { path: candidate, contents: readFileSync(fsPath, "utf8") };
+      return { path: candidate, contents: inlineSharedCore(readFileSync(fsPath, "utf8"), entityKey) };
     }
   }
   return null;
@@ -837,7 +858,7 @@ function buildPluginZip(manifest) {
       // shipped artifact is what the controller's *EntityFile decoder
       // expects: a single JSON with `code` set inline.
       const entityFile = readJson(entityFs);
-      const sibling = readSiblingCode(e.path);
+      const sibling = readSiblingCode(e.path, e.key);
       if (sibling) {
         if (entityFile.code !== undefined) {
           fail(
