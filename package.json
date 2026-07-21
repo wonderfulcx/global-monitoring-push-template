@@ -1,0 +1,16 @@
+{
+  "name": "wonderful-plugin-template",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Starter template for Wonderful Marketplace plugins.",
+  "type": "module",
+  "packageManager": "pnpm@10.6.4",
+  "scripts": {
+    "package": "node scripts/package.mjs",
+    "package:check": "node scripts/package.mjs --dry-run",
+    "dev-install": "node scripts/dev-install.mjs"
+  },
+  "devDependencies": {
+    "adm-zip": "^0.5.16"
+  }
+}

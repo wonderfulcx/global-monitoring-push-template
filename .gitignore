@@ -1,0 +1,15 @@
+node_modules/
+dist/
+entities/*/node_modules/
+entities/*/dist/
+entities/*/bundle.zip
+
+# editors
+.DS_Store
+.vscode/
+.idea/
+
+# misc
+*.log
+.env
+.env.local

@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "publisher_id": "wonderful",
+  "slug": "wonderful/global-monitoring-push-template",
+  "version": "0.1.1",
+  "title": "Global Monitoring — Push Template",
+  "short_description": "Pub/sub push template: hourly cron reads this tenant's own status and pushes it to germany-internal's global-monitoring dashboard, instead of the dashboard pulling with a read key.",
+  "category": "Observability",
+  "tags": ["monitoring", "internal", "push", "pubsub"],
+  "icon_path": "media/icon.png",
+  "screenshot_paths": [
+    "media/screenshots/01-overview.png"
+  ],
+  "readme_path": "README.md",
+  "release_notes": "v0.1: hourly push of this tenant's own status (labeled Alerts-Assistant) to germany-internal's collect_tenant_status.",
+  "required_secrets": [
+    {
+      "name": "FDE_SELF_READ_API_KEY",
+      "display_name": "Self-read API key",
+      "description": "Read key for this same tenant's own communications/issues/alerts, used before pushing the summary out.",
+      "secret_type": "API Key",
+      "required": true
+    },
+    {
+      "name": "GLOBAL_MONITORING_PUSH_KEY",
+      "display_name": "Global Monitoring push key",
+      "description": "Long-lived shared API key, same value as the one stored on germany-internal, attached to the pushed payload for the collect endpoint to validate.",
+      "secret_type": "API Key",
+      "required": true
+    }
+  ],
+  "required_global_variables": [
+    {
+      "name": "self_api_url",
+      "display_name": "This tenant's own API base URL",
+      "description": "e.g. https://fde-onboarding-v2.api.sb.wonderful.ai",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "global_monitoring_collect_url",
+      "display_name": "Collect endpoint URL",
+      "description": "germany-internal's collect_tenant_status function URL that this tenant pushes its status to.",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "tenant_label",
+      "display_name": "Tenant label",
+      "description": "Display name this tenant is shown as on the dashboard. Not hardcoded in code so this same plugin can be installed on multiple tenants.",
+      "type": "string",
+      "required": true
+    }
+  ],
+  "entities": [
+    {
+      "type": "cronjob",
+      "key": "push_alerts_assistant_status",
+      "path": "entities/push-alerts-assistant-status.cronjob/entity.json"
+    }
+  ]
+}
