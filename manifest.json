@@ -2,9 +2,9 @@
   "schema_version": 1,
   "publisher_id": "wonderful",
   "slug": "wonderful/global-monitoring-push-template",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "title": "Global Monitoring — Push Template",
-  "short_description": "Pub/sub push template: hourly cron reads this tenant's own status and pushes it to the global-monitoring dashboard. Self-serve — the only per-tenant config is a read token, the tenant's API URL, and a label.",
+  "short_description": "Pub/sub push template: hourly cron reads this tenant's own status and pushes it to the global-monitoring dashboard. Self-serve — required config is just a read token, the tenant's API URL, and a label; what-to-share (tier) and cadence are optional.",
   "category": "Observability",
   "tags": ["monitoring", "internal", "push", "pubsub"],
   "icon_path": "media/icon.png",
@@ -12,7 +12,7 @@
     "media/screenshots/01-overview.png"
   ],
   "readme_path": "README.md",
-  "release_notes": "v0.6.0: self-serve install. The collect endpoint is now public (no GERMANY_INTERNAL_INVOKE_API_KEY) and the push token is a hardcoded public namespace marker (no GLOBAL_MONITORING_PUSH_KEY); the collect URL is hardcoded too. A tenant now provides only SERVICE_MONITORING_TOKEN + self_api_url + tenant_label — no shared secrets.",
+  "release_notes": "v0.7.0: tenant-configurable what + cadence. monitoring_tier (T0-T3, default T3) projects each window before sending, so the tenant controls how much detail leaves. monitoring_push_interval_minutes (default 60) gates push frequency, persisted in the new monitoring_push_state table (kv is session-scoped). Both optional and default in code, so self-serve install is unchanged.",
   "required_secrets": [
     {
       "name": "SERVICE_MONITORING_TOKEN",
@@ -36,13 +36,35 @@
       "description": "Display name this tenant is shown as on the dashboard. Not hardcoded in code so this same plugin can be installed on multiple tenants.",
       "type": "string",
       "required": true
+    },
+    {
+      "name": "monitoring_tier",
+      "display_name": "Share tier (optional)",
+      "description": "How much detail leaves this tenant: T0 (name+severity), T1 (+health rollup), T2 (+per-agent KPIs, business metrics, monitor rollups), T3 (+full alert/monitor lists). Optional — defaults to T3 (full).",
+      "type": "string",
+      "default_value": "T3",
+      "required": false
+    },
+    {
+      "name": "monitoring_push_interval_minutes",
+      "display_name": "Push interval, minutes (optional)",
+      "description": "Minimum minutes between pushes. The cron fires hourly; a run is skipped if the last push was more recent than this. Optional — defaults to 60 (push every run). Set e.g. 360 to push every 6h.",
+      "type": "string",
+      "default_value": "60",
+      "required": false
     }
   ],
   "entities": [
     {
+      "type": "custom_table",
+      "key": "monitoring_push_state",
+      "path": "entities/monitoring_push_state.custom_table.json"
+    },
+    {
       "type": "cronjob",
       "key": "push_alerts_assistant_status",
-      "path": "entities/push-alerts-assistant-status.cronjob/entity.json"
+      "path": "entities/push-alerts-assistant-status.cronjob/entity.json",
+      "depends_on": ["monitoring_push_state"]
     }
   ]
 }
