@@ -2,9 +2,9 @@
   "schema_version": 1,
   "publisher_id": "wonderful",
   "slug": "wonderful/global-monitoring-push-template",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "title": "Global Monitoring — Push Template",
-  "short_description": "Pub/sub push template: hourly cron reads this tenant's own status and pushes it to germany-internal's global-monitoring dashboard, instead of the dashboard pulling with a read key.",
+  "short_description": "Pub/sub push template: hourly cron reads this tenant's own status and pushes it to the global-monitoring dashboard. Self-serve — the only per-tenant config is a read token, the tenant's API URL, and a label.",
   "category": "Observability",
   "tags": ["monitoring", "internal", "push", "pubsub"],
   "icon_path": "media/icon.png",
@@ -12,27 +12,13 @@
     "media/screenshots/01-overview.png"
   ],
   "readme_path": "README.md",
-  "release_notes": "v0.5.0: complete the per-tenant setup form — declare GERMANY_INTERNAL_INVOKE_API_KEY as a required secret (so install prompts for it) and add a default collect URL. Installing the plugin now collects/validates all secrets + globals in one guided dialog. (v0.4.0: renamed self-read secret to SERVICE_MONITORING_TOKEN, Bearer Token.)",
+  "release_notes": "v0.6.0: self-serve install. The collect endpoint is now public (no GERMANY_INTERNAL_INVOKE_API_KEY) and the push token is a hardcoded public namespace marker (no GLOBAL_MONITORING_PUSH_KEY); the collect URL is hardcoded too. A tenant now provides only SERVICE_MONITORING_TOKEN + self_api_url + tenant_label — no shared secrets.",
   "required_secrets": [
     {
       "name": "SERVICE_MONITORING_TOKEN",
       "display_name": "Service monitoring token",
       "description": "Bearer token for reading this same tenant's own communications/issues/alerts before pushing the summary out. Sent as Authorization: Bearer. Legacy API Key values are still tolerated by the code.",
       "secret_type": "Bearer Token",
-      "required": true
-    },
-    {
-      "name": "GLOBAL_MONITORING_PUSH_KEY",
-      "display_name": "Global Monitoring push key",
-      "description": "Long-lived shared API key, same value as the one stored on germany-internal, attached to the pushed payload for the collect endpoint to validate.",
-      "secret_type": "API Key",
-      "required": true
-    },
-    {
-      "name": "GERMANY_INTERNAL_INVOKE_API_KEY",
-      "display_name": "Collect endpoint invoke key",
-      "description": "Platform-issued API key for the collect tenant (germany-internal), sent as the x-api-key gateway header so the push request can reach the collect function. Same value across all pushing tenants.",
-      "secret_type": "API Key",
       "required": true
     }
   ],
@@ -42,14 +28,6 @@
       "display_name": "This tenant's own API base URL",
       "description": "This tenant's own API base URL, used for the self-read. Pattern: https://<tenant>.api.<env>.wonderful.ai (e.g. https://eventim.api.wonderful.ai).",
       "type": "string",
-      "required": true
-    },
-    {
-      "name": "global_monitoring_collect_url",
-      "display_name": "Collect endpoint URL",
-      "description": "The collect_tenant_status function URL this tenant pushes its status to (the aggregator/hub). Default points at germany-internal; change only if pushing to a different hub.",
-      "type": "string",
-      "default_value": "https://germany-internal.api.demo.wonderful.ai/api/v1/functions/collect-tenant-status",
       "required": true
     },
     {
