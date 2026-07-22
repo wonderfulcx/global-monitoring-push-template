@@ -2,7 +2,7 @@
   "schema_version": 1,
   "publisher_id": "wonderful",
   "slug": "wonderful/global-monitoring-push-template",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "title": "Global Monitoring — Push Template",
   "short_description": "Pub/sub push template: hourly cron reads this tenant's own status and pushes it to germany-internal's global-monitoring dashboard, instead of the dashboard pulling with a read key.",
   "category": "Observability",
@@ -12,13 +12,13 @@
     "media/screenshots/01-overview.png"
   ],
   "readme_path": "README.md",
-  "release_notes": "v0.1: hourly push of this tenant's own status (labeled Alerts-Assistant) to germany-internal's collect_tenant_status.",
+  "release_notes": "v0.4.0: rename self-read secret FDE_SELF_READ_API_KEY -> SERVICE_MONITORING_TOKEN and switch its type to Bearer Token (value sent as Authorization: Bearer). Code reads .token, tolerant of legacy .api_key for migration.",
   "required_secrets": [
     {
-      "name": "FDE_SELF_READ_API_KEY",
-      "display_name": "Self-read API key",
-      "description": "Read key for this same tenant's own communications/issues/alerts, used before pushing the summary out.",
-      "secret_type": "API Key",
+      "name": "SERVICE_MONITORING_TOKEN",
+      "display_name": "Service monitoring token",
+      "description": "Bearer token for reading this same tenant's own communications/issues/alerts before pushing the summary out. Sent as Authorization: Bearer. Legacy API Key values are still tolerated by the code.",
+      "secret_type": "Bearer Token",
       "required": true
     },
     {
