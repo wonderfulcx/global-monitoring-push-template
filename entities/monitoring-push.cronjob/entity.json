@@ -1,0 +1,10 @@
+{
+  "name": "monitoring_push",
+  "slug": "monitoring-push",
+  "description": "Hourly cron: reads this tenant's own status, projects it to the configured monitoring_tier, and POSTs it to the global-monitoring collect endpoint. Push frequency is gated by monitoring_push_interval_minutes.",
+  "cron_schedules": [
+    { "cron_expression": "0 * * * *", "enabled": true }
+  ],
+  "is_enabled": true,
+  "timeout_ms": 30000
+}
