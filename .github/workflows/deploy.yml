@@ -1,0 +1,71 @@
+name: Deploy (dev-install)
+
+# Side-load the current build onto a Wonderful tenant via the controller's
+# dev-install endpoint (POST /api/v1/catalog/plugins/dev-install), the supported
+# programmatic install path (`pnpm dev-install`).
+#
+# NOTE: dev-install deploys the plugin's ENTITIES (the cron), not the tenant's
+# secrets/globals. First-time onboarding of a tenant's SERVICE_MONITORING_TOKEN /
+# GLOBAL_MONITORING_PUSH_KEY / GERMANY_INTERNAL_INVOKE_API_KEY + globals is done
+# once via the catalog Install dialog. This workflow is for keeping the plugin
+# CODE current on an already-configured tenant.
+#
+# It does NOT publish to the shared Catalog (browse/search) — that is the catalog
+# admin SPA "Submissions -> Upload" flow using the Release artifact.
+#
+# Required repo secret:
+#   WONDERFUL_API_KEY  — an API key with write/install access on the TARGET tenant.
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Target platform base URL (e.g. https://fde-onboarding-v2.api.sb.wonderful.ai)"
+        required: true
+      workspace_id:
+        description: "Target workspace UUID"
+        required: false
+        default: "00000000-0000-0000-0000-000000000000"
+
+permissions:
+  contents: read
+
+jobs:
+  dev-install:
+    runs-on: ubuntu-latest
+    # Optional: create a GitHub Environment named "wonderful" with required
+    # reviewers to gate deploys behind an approval.
+    environment: wonderful
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.SUBMODULES_TOKEN || github.token }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Package + validate
+        run: pnpm package
+
+      - name: Dev-install onto target tenant
+        env:
+          WONDERFUL_API_KEY: ${{ secrets.WONDERFUL_API_KEY }}
+          WONDERFUL_BASE_URL: ${{ github.event.inputs.base_url }}
+          WONDERFUL_TARGET_WORKSPACE_ID: ${{ github.event.inputs.workspace_id }}
+        run: |
+          if [ -z "$WONDERFUL_API_KEY" ]; then
+            echo "::error::WONDERFUL_API_KEY secret is not set (repo Settings -> Secrets and variables -> Actions)."
+            exit 1
+          fi
+          pnpm dev-install -- --no-package
