@@ -1,0 +1,8 @@
+{
+  "name": "monitoring_push_state",
+  "description": "Internal push-cron state: the last successful push timestamp, used to honor monitoring_push_interval_minutes across hourly cron runs (kv is session-scoped and does not persist between runs). One row, id='state'.",
+  "columns": [
+    { "name": "id", "type": "string", "required": true },
+    { "name": "last_pushed_at", "type": "number", "required": true }
+  ]
+}
