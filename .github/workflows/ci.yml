@@ -1,0 +1,50 @@
+name: CI
+
+# Build + validate the plugin on every PR and every push to main.
+# `pnpm package` runs the same manifest validator the catalog uses server-side,
+# so a broken manifest/entity fails here instead of at upload time.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          # shared_lib -> global-monitoring-core is inlined at package time.
+          # If that repo is PRIVATE, the default GITHUB_TOKEN cannot read it —
+          # add a SUBMODULES_TOKEN secret (a PAT with read access to the org)
+          # and it will be used automatically.
+          submodules: recursive
+          token: ${{ secrets.SUBMODULES_TOKEN || github.token }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4 # version comes from package.json "packageManager"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Package + validate
+        run: pnpm package
+
+      - name: Upload built plugin archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin-archive
+          path: dist/*.zip
+          if-no-files-found: error
+          retention-days: 14

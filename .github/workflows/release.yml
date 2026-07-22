@@ -1,0 +1,52 @@
+name: Release
+
+# On a version tag (e.g. `git tag v0.5.0 && git push --tags`), build the plugin
+# and attach the versioned zip to a GitHub Release. That zip is the canonical
+# artifact you upload to the catalog admin SPA (Submissions -> Upload) to publish
+# a new version to the Catalog.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write # create the release + upload the asset
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.SUBMODULES_TOKEN || github.token }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Package + validate
+        run: pnpm package
+
+      - name: Verify tag matches manifest version
+        run: |
+          MANIFEST_VERSION="v$(node -p "require('./manifest.json').version")"
+          if [ "${GITHUB_REF_NAME}" != "$MANIFEST_VERSION" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} does not match manifest version ${MANIFEST_VERSION}"
+            exit 1
+          fi
+
+      - name: Create GitHub Release with the plugin archive
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.zip
+          generate_release_notes: true
