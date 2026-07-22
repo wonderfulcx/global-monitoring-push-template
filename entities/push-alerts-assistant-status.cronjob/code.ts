@@ -1,7 +1,8 @@
 // push_alerts_assistant_status — pub/sub push template, sender side.
 //
 // Hourly: reads THIS tenant's own status (self-referential read via its own
-// API key) and POSTs a snapshot to germany-internal's collect_tenant_status.
+// SERVICE_MONITORING_TOKEN) and POSTs a snapshot to germany-internal's
+// collect_tenant_status.
 //
 // Shared low-level read-logic (apiCall, getList, getExactCommsCount,
 // secretApiKey, the open-issue/alert filters) is inlined from the shared_lib
@@ -20,11 +21,24 @@
 
 // @@inline-core
 
+// Self-read credential. Canonical secret is SERVICE_MONITORING_TOKEN, a
+// Bearer Token secret ({ token }); older installs may still hold an API Key
+// ({ api_key }). Read the token first, then fall back to the shared api_key
+// unwrapper so a tenant can migrate without a flag day. Either shape is sent
+// as `Authorization: Bearer <value>` by apiCall.
+function selfReadToken(raw: unknown): string | undefined {
+  if (typeof raw === "string") return raw;
+  const obj = raw as Record<string, unknown> | null;
+  const token = obj?.token ?? (obj?.value as Record<string, unknown> | undefined)?.token;
+  if (typeof token === "string") return token;
+  return secretApiKey(raw);
+}
+
 async function userFunction(context: Context): Promise<Result> {
   const base = String(context.globals.get("self_api_url") ?? "");
   const collectUrl = String(context.globals.get("global_monitoring_collect_url") ?? "");
   const tenantLabel = String(context.globals.get("tenant_label") ?? "");
-  const apiKey = secretApiKey(context.secrets.get("FDE_SELF_READ_API_KEY"));
+  const apiKey = selfReadToken(context.secrets.get("SERVICE_MONITORING_TOKEN"));
   const pushKey = secretApiKey(context.secrets.get("GLOBAL_MONITORING_PUSH_KEY"));
   // Real platform-issued germany-internal key — required for the request to
   // reach the collect function at all (gateway auth). GLOBAL_MONITORING_PUSH_KEY
@@ -35,7 +49,7 @@ async function userFunction(context: Context): Promise<Result> {
     return {
       error: "missing_config",
       message:
-        "self_api_url, global_monitoring_collect_url, tenant_label, FDE_SELF_READ_API_KEY, GLOBAL_MONITORING_PUSH_KEY, GERMANY_INTERNAL_INVOKE_API_KEY must all be set.",
+        "self_api_url, global_monitoring_collect_url, tenant_label, SERVICE_MONITORING_TOKEN, GLOBAL_MONITORING_PUSH_KEY, GERMANY_INTERNAL_INVOKE_API_KEY must all be set.",
     };
   }
 
