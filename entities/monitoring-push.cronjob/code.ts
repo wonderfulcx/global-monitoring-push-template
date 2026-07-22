@@ -1,4 +1,4 @@
-// push_alerts_assistant_status — pub/sub push template, sender side.
+// monitoring_push — pub/sub push template, sender side.
 //
 // Hourly cron: self-reads THIS tenant's own status (via its own
 // SERVICE_MONITORING_TOKEN) and POSTs a snapshot to the public global-monitoring

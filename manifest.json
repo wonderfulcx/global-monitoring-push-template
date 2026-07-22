@@ -12,7 +12,7 @@
     "media/screenshots/01-overview.png"
   ],
   "readme_path": "README.md",
-  "release_notes": "v0.7.0: tenant-configurable what + cadence. monitoring_tier (T0-T3, default T3) projects each window before sending, so the tenant controls how much detail leaves. monitoring_push_interval_minutes (default 60) gates push frequency, persisted in the new monitoring_push_state table (kv is session-scoped). Both optional and default in code, so self-serve install is unchanged.",
+  "release_notes": "v0.7.0: tenant-configurable what + cadence. monitoring_tier (T0-T3, default T3) projects each window before sending, so the tenant controls how much detail leaves. monitoring_push_interval_minutes (default 60) gates push frequency, persisted in the new monitoring_push_state table (kv is session-scoped). Both optional and default in code, so self-serve install is unchanged. Also renames the cron push_alerts_assistant_status -> monitoring_push (drops the legacy Alerts-Assistant name) and bumps shared_lib to core main so pushes carry the per-agent KPI layer.",
   "required_secrets": [
     {
       "name": "SERVICE_MONITORING_TOKEN",
@@ -62,8 +62,8 @@
     },
     {
       "type": "cronjob",
-      "key": "push_alerts_assistant_status",
-      "path": "entities/push-alerts-assistant-status.cronjob/entity.json",
+      "key": "monitoring_push",
+      "path": "entities/monitoring-push.cronjob/entity.json",
       "depends_on": ["monitoring_push_state"]
     }
   ]
