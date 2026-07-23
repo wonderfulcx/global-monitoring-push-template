@@ -133,6 +133,22 @@ async function userFunction(context: Context): Promise<Result> {
   // can consistency-check against its own received_at.
   const payload = { name: tenantLabel, tier, pushed_at: now, windows };
 
+  // Per-window summary of exactly what is being sent (post-tier), so a user can
+  // verify the pushed data in the function's run logs / output on the source tenant.
+  const summary = ranges.map((r) => {
+    const w = (windows[r] ?? {}) as Record<string, unknown>;
+    return {
+      window: r,
+      interactions: (w.interactions as number) ?? null,
+      open_issues: (w.open_issues as number) ?? null,
+      active_alerts: (w.active_alerts as number) ?? null,
+      business_metrics: Array.isArray(w.business_metrics) ? w.business_metrics.length : 0,
+      agents: Array.isArray(w.agents) ? w.agents.length : 0,
+      errors: Array.isArray(w.errors) ? (w.errors as string[]).length : 0,
+    };
+  });
+  log("pushing", { tenant: tenantLabel, tier, pushed_at: now, summary });
+
   let res: { ok: boolean; status: number; json: () => Promise<unknown> };
   try {
     res = (await fetch(COLLECT_URL, {
@@ -151,6 +167,6 @@ async function userFunction(context: Context): Promise<Result> {
     throw new Error(`push failed: HTTP ${res.status} ${JSON.stringify(body).slice(0, 200)}`);
   }
 
-  log("push ok", { status: res.status, windows: ranges, pushed_at: now });
-  return { ok: true, tier, pushed_at: now, pushed_windows: ranges, collect_response: body };
+  log("push ok", { status: res.status, pushed_at: now, summary });
+  return { ok: true, tier, pushed_at: now, pushed_windows: ranges, summary, collect_response: body };
 }
