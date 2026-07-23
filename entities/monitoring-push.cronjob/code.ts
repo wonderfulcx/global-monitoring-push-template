@@ -76,16 +76,18 @@ function applyTier(w: Record<string, unknown>, tier: Tier): Record<string, unkno
 
 // Normalize the self-read base URL. Users copy it out of the browser URL bar,
 // which is the DASHBOARD host (…​.app.…) — but the API lives on …​.api.… So:
-// (1) tolerate a missing scheme, (2) keep only the origin (drop any pasted
-// path/query), (3) rewrite the .app host to .api. Cheap, idempotent, and it
-// means "just paste whatever's in your address bar" works. A correct .api URL
-// passes through unchanged.
+// (1) tolerate a missing scheme, (2) keep only the origin — drops any pasted
+// path/query, (3) strip a trailing slash (`…​.ai/` would make calls `…​//api/v1`
+// → 404), (4) rewrite the .app host to .api. Cheap, idempotent, and it means
+// "just paste whatever's in your address bar" works. A correct .api URL passes
+// through unchanged.
 function normalizeBase(raw: string): string {
   let b = String(raw ?? "").trim();
   if (!b) return "";
   if (!/^https?:\/\//i.test(b)) b = "https://" + b;
   const origin = b.match(/^(https?:\/\/[^/]+)/i);
   if (origin) b = origin[1];
+  b = b.replace(/\/+$/, ""); // strip trailing slash(es) — the // → 404 bug
   return b.replace(/\.app\./i, ".api.");
 }
 
