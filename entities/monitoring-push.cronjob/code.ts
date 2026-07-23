@@ -84,10 +84,22 @@ function selfReadToken(raw: unknown): string | undefined {
   return secretApiKey(raw);
 }
 
+// context.globals.get() THROWS "not-found" for a missing global (confirmed
+// live) — it does not return null. So read defensively: missing/unset -> "".
+// This is what lets gm_tier be genuinely optional (default in code).
+function readGlobal(context: Context, name: string): string {
+  try {
+    const v = context.globals.get(name);
+    return v == null ? "" : String(v);
+  } catch {
+    return "";
+  }
+}
+
 async function userFunction(context: Context): Promise<Result> {
-  const base = String(context.globals.get("gm_self_api_url") ?? "");
-  const tenantLabel = String(context.globals.get("gm_tenant_label") ?? "");
-  const tier = normalizeTier(context.globals.get("gm_tier"));
+  const base = readGlobal(context, "gm_self_api_url");
+  const tenantLabel = readGlobal(context, "gm_tenant_label");
+  const tier = normalizeTier(readGlobal(context, "gm_tier"));
   const apiKey = selfReadToken(context.secrets.get("SERVICE_MONITORING_TOKEN"));
 
   if (!base || !tenantLabel || !apiKey) {
