@@ -168,7 +168,19 @@ async function userFunction(context: Context): Promise<Result> {
       errors: Array.isArray(w.errors) ? (w.errors as string[]).length : 0,
     };
   });
-  log("pushing", { tenant: tenantLabel, tier, pushed_at: now, summary });
+  // The distinct error MESSAGES, deduped across windows (the same read failure
+  // repeats in every window). Surfaced in the logs AND the return value so you
+  // can read exactly WHAT failed straight from the function's Output/Logs on the
+  // source tenant — not just a count. e.g. "business_metrics: HTTP 403: …".
+  const errors = [
+    ...new Set(
+      ranges.flatMap((r) => {
+        const w = (windows[r] ?? {}) as Record<string, unknown>;
+        return Array.isArray(w.errors) ? (w.errors as string[]) : [];
+      }),
+    ),
+  ];
+  log("pushing", { tenant: tenantLabel, tier, pushed_at: now, summary, errors });
 
   // Did the self-read actually return data? fetchTenantStatus returns an
   // { errors }/{ error } object instead of throwing, so all four windows can
@@ -203,25 +215,30 @@ async function userFunction(context: Context): Promise<Result> {
   // execution (still pushed the error snapshot above so the tenant's trouble is
   // visible on the dashboard). This is what turns a red-underneath run from a
   // green "success" into an honest failure.
-  if (selfReadFailed) {
-    logErr("pushed, but self-read failed for every window — failing the run", {
-      failed_windows: failedWindows,
-      summary,
-    });
-    throw new Error(
-      `self-read failed: ${failedWindows}/${ranges.length} windows errored — no real data was collected. ` +
-        `Verify gm_self_api_url resolves to the .api host and SERVICE_MONITORING_TOKEN is a valid read key.`,
-    );
+  // Errors are NEVER swallowed. We still pushed whatever we could read (so the
+  // dashboard shows partial data), but if ANY read failed the run FAILS — a
+  // green "success" must mean "read and reported everything", not merely "the
+  // POST returned 200". The exact messages go into the thrown error so they are
+  // visible right in the run's Status/Details on the source tenant, not only on
+  // the hub dashboard.
+  if (errors.length > 0) {
+    const kind = selfReadFailed ? "failed (no data read)" : "incomplete (partial data pushed)";
+    const hint = selfReadFailed
+      ? "Verify gm_self_api_url resolves to the .api host and SERVICE_MONITORING_TOKEN is a valid read key."
+      : "The token is likely missing a permission for the failed read(s) — e.g. metrics:view for /api/v2/query/aggregate & /metric-stats.";
+    logErr(`self-read ${kind} — failing the run`, { failed_windows: failedWindows, errors });
+    throw new Error(`self-read ${kind}: ${errors.join(" | ")} — ${hint}`);
   }
 
-  log("push ok", { status: res.status, pushed_at: now, summary, self_read_errors: failedWindows });
+  log("push ok", { status: res.status, pushed_at: now, summary });
   return {
     ok: true,
     tier,
     pushed_at: now,
     pushed_windows: ranges,
     summary,
-    self_read_errors: failedWindows,
+    self_read_errors: 0,
+    errors: [], // green success ⇒ zero read errors (any error would have thrown above)
     collect_response: body,
   };
 }
