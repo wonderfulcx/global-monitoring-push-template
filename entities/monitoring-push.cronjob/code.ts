@@ -70,7 +70,23 @@ function applyTier(w: Record<string, unknown>, tier: Tier): Record<string, unkno
     out.monitors = w.monitors ?? [];
   }
   if (Array.isArray(w.errors)) out.errors = w.errors;
+  else if (typeof w.error === "string") out.errors = [w.error];
   return out;
+}
+
+// Normalize the self-read base URL. Users copy it out of the browser URL bar,
+// which is the DASHBOARD host (…​.app.…) — but the API lives on …​.api.… So:
+// (1) tolerate a missing scheme, (2) keep only the origin (drop any pasted
+// path/query), (3) rewrite the .app host to .api. Cheap, idempotent, and it
+// means "just paste whatever's in your address bar" works. A correct .api URL
+// passes through unchanged.
+function normalizeBase(raw: string): string {
+  let b = String(raw ?? "").trim();
+  if (!b) return "";
+  if (!/^https?:\/\//i.test(b)) b = "https://" + b;
+  const origin = b.match(/^(https?:\/\/[^/]+)/i);
+  if (origin) b = origin[1];
+  return b.replace(/\.app\./i, ".api.");
 }
 
 // Self-read credential. SERVICE_MONITORING_TOKEN is a Bearer Token secret
@@ -97,18 +113,21 @@ function readGlobal(context: Context, name: string): string {
 }
 
 async function userFunction(context: Context): Promise<Result> {
-  const base = readGlobal(context, "gm_self_api_url");
+  const rawBase = readGlobal(context, "gm_self_api_url");
+  const base = normalizeBase(rawBase);
   const tenantLabel = readGlobal(context, "gm_tenant_label");
   const tier = normalizeTier(readGlobal(context, "gm_tier"));
   const apiKey = selfReadToken(context.secrets.get("SERVICE_MONITORING_TOKEN"));
 
   if (!base || !tenantLabel || !apiKey) {
     logErr("missing_config", { has_base: !!base, has_label: !!tenantLabel, has_token: !!apiKey });
-    return {
-      error: "missing_config",
-      message: "gm_self_api_url, gm_tenant_label, and SERVICE_MONITORING_TOKEN must all be set.",
-    };
+    // Throw (don't return a soft error) so the run is reported as failed, not
+    // a green success with an error buried in the output.
+    throw new Error(
+      "missing_config: gm_self_api_url, gm_tenant_label, and SERVICE_MONITORING_TOKEN must all be set.",
+    );
   }
+  if (base !== rawBase.trim()) log("normalized self-read base url", { from: rawBase, to: base });
   log("start", { tenant: tenantLabel, tier, base });
 
   const now = Date.now();
@@ -149,6 +168,17 @@ async function userFunction(context: Context): Promise<Result> {
   });
   log("pushing", { tenant: tenantLabel, tier, pushed_at: now, summary });
 
+  // Did the self-read actually return data? fetchTenantStatus returns an
+  // { errors }/{ error } object instead of throwing, so all four windows can
+  // "succeed" while carrying nothing but errors. Counting failed windows lets us
+  // report the run honestly: a total self-read failure must NOT show as success
+  // just because the downstream POST worked (Alex's feedback).
+  const failedWindows = windowResults.filter((w) => {
+    const o = (w ?? {}) as Record<string, unknown>;
+    return (Array.isArray(o.errors) && o.errors.length > 0) || typeof o.error === "string";
+  }).length;
+  const selfReadFailed = failedWindows === ranges.length;
+
   let res: { ok: boolean; status: number; json: () => Promise<unknown> };
   try {
     res = (await fetch(COLLECT_URL, {
@@ -158,7 +188,7 @@ async function userFunction(context: Context): Promise<Result> {
     })) as unknown as typeof res;
   } catch (e) {
     logErr("push transport error", String(e));
-    return { error: "push_transport_error", message: String(e) };
+    throw new Error(`push_transport_error: ${String(e)}`);
   }
 
   const body = await res.json().catch(() => ({}));
@@ -167,6 +197,29 @@ async function userFunction(context: Context): Promise<Result> {
     throw new Error(`push failed: HTTP ${res.status} ${JSON.stringify(body).slice(0, 200)}`);
   }
 
-  log("push ok", { status: res.status, pushed_at: now, summary });
-  return { ok: true, tier, pushed_at: now, pushed_windows: ranges, summary, collect_response: body };
+  // The POST succeeded — but if the self-read gathered no real data, fail the
+  // execution (still pushed the error snapshot above so the tenant's trouble is
+  // visible on the dashboard). This is what turns a red-underneath run from a
+  // green "success" into an honest failure.
+  if (selfReadFailed) {
+    logErr("pushed, but self-read failed for every window — failing the run", {
+      failed_windows: failedWindows,
+      summary,
+    });
+    throw new Error(
+      `self-read failed: ${failedWindows}/${ranges.length} windows errored — no real data was collected. ` +
+        `Verify gm_self_api_url resolves to the .api host and SERVICE_MONITORING_TOKEN is a valid read key.`,
+    );
+  }
+
+  log("push ok", { status: res.status, pushed_at: now, summary, self_read_errors: failedWindows });
+  return {
+    ok: true,
+    tier,
+    pushed_at: now,
+    pushed_windows: ranges,
+    summary,
+    self_read_errors: failedWindows,
+    collect_response: body,
+  };
 }
