@@ -2,9 +2,9 @@
   "schema_version": 1,
   "publisher_id": "wonderful",
   "slug": "wonderful/global-monitoring-push-template",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "title": "Global Monitoring — Push Template",
-  "short_description": "Pub/sub push template: hourly cron reads this tenant's own status and pushes it to the global-monitoring dashboard. Self-serve — required config is just a read token, the tenant's API URL, and a label; what-to-share (tier) and cadence are optional.",
+  "short_description": "Pub/sub push template: a cron reads this tenant's own status and pushes it to the global-monitoring dashboard. Self-serve — required config is just a read token, the tenant's API URL, and a label; share-tier is optional and cadence is the cron schedule.",
   "category": "Observability",
   "tags": ["monitoring", "internal", "push", "pubsub"],
   "icon_path": "media/icon.png",
@@ -12,7 +12,7 @@
     "media/screenshots/01-overview.png"
   ],
   "readme_path": "README.md",
-  "release_notes": "v0.7.0: tenant-configurable what + cadence. monitoring_tier (T0-T3, default T3) projects each window before sending, so the tenant controls how much detail leaves. monitoring_push_interval_minutes (default 60) gates push frequency, persisted in the new monitoring_push_state table (kv is session-scoped). Both optional and default in code, so self-serve install is unchanged. Also renames the cron push_alerts_assistant_status -> monitoring_push (drops the legacy Alerts-Assistant name) and bumps shared_lib to core main so pushes carry the per-agent KPI layer.",
+  "release_notes": "v0.8.0: fixes from first-tenant feedback. (1) Use the public-invoke URL for the collect endpoint (the /api/v1 path 401'd unauthenticated). (2) Cadence is now the cron schedule itself (default every 5 min) — removed the fragile interval-gating + state table. (3) Payload carries a sender-side pushed_at (epoch ms UTC). (4) All globals prefixed gm_ to avoid collisions. (5) Added run logging. (6) More resilient error handling (a failing window no longer sinks the push). (7) Removed customer-specific examples from the setup page.",
   "required_secrets": [
     {
       "name": "SERVICE_MONITORING_TOKEN",
@@ -24,47 +24,33 @@
   ],
   "required_global_variables": [
     {
-      "name": "self_api_url",
+      "name": "gm_self_api_url",
       "display_name": "This tenant's own API base URL",
-      "description": "This tenant's own API base URL, used for the self-read. Pattern: https://<tenant>.api.<env>.wonderful.ai (e.g. https://eventim.api.wonderful.ai).",
+      "description": "This tenant's own API base URL, used for the self-read. Pattern: https://<tenant>.api.<env>.wonderful.ai",
       "type": "string",
       "required": true
     },
     {
-      "name": "tenant_label",
+      "name": "gm_tenant_label",
       "display_name": "Tenant label",
-      "description": "Display name this tenant is shown as on the dashboard. Not hardcoded in code so this same plugin can be installed on multiple tenants.",
+      "description": "Display name this tenant is shown as on the dashboard. Not hardcoded in code so the same plugin can be installed on multiple tenants.",
       "type": "string",
       "required": true
     },
     {
-      "name": "monitoring_tier",
+      "name": "gm_tier",
       "display_name": "Share tier (optional)",
       "description": "How much detail leaves this tenant: T0 (name+severity), T1 (+health rollup), T2 (+per-agent KPIs, business metrics, monitor rollups), T3 (+full alert/monitor lists). Optional — defaults to T3 (full).",
       "type": "string",
       "default_value": "T3",
       "required": false
-    },
-    {
-      "name": "monitoring_push_interval_minutes",
-      "display_name": "Push interval, minutes (optional)",
-      "description": "Minimum minutes between pushes. The cron fires hourly; a run is skipped if the last push was more recent than this. Optional — defaults to 60 (push every run). Set e.g. 360 to push every 6h.",
-      "type": "string",
-      "default_value": "60",
-      "required": false
     }
   ],
   "entities": [
     {
-      "type": "custom_table",
-      "key": "monitoring_push_state",
-      "path": "entities/monitoring_push_state.custom_table.json"
-    },
-    {
       "type": "cronjob",
       "key": "monitoring_push",
-      "path": "entities/monitoring-push.cronjob/entity.json",
-      "depends_on": ["monitoring_push_state"]
+      "path": "entities/monitoring-push.cronjob/entity.json"
     }
   ]
 }
