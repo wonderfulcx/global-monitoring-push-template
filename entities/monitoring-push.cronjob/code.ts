@@ -141,7 +141,11 @@ async function userFunction(context: Context): Promise<Result> {
     ranges.map((r) =>
       Promise.resolve(fetchTenantStatus(tenantLabel, base, apiKey, computeWindow(r, now))).catch((e) => {
         logErr(`window ${r} read failed`, String(e));
-        return { name: tenantLabel, error: `window_read_failed: ${String(e)}`, severity: "attention" };
+        // A window we could not read tells us nothing about the tenant's health,
+        // so it must not carry a health verdict. "attention" rendered this
+        // orange — a measurement failure dressed up as a mild finding. The hub
+        // maps an unrecognised severity to grey/unknown, which is the truth.
+        return { name: tenantLabel, error: `window_read_failed: ${String(e)}`, severity: "unknown" };
       }),
     ),
   );
