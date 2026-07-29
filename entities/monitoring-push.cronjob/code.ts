@@ -64,6 +64,19 @@ function applyTier(w: Record<string, unknown>, tier: Tier): Record<string, unkno
     out.business_metrics = w.business_metrics ?? [];
     out.monitors_by_severity = w.monitors_by_severity;
     out.monitors_by_agent = w.monitors_by_agent ?? [];
+    // Technical ops. T2 because all three are per-agent or per-tool detail,
+    // which is exactly what T2 already means here (`agents`, the monitor
+    // rollups). None of it is PII: service names, millisecond averages, tag
+    // name prefixes and counts. A T1 tenant still contributes its severity and
+    // its issue/alert counts, it just does not explain them.
+    //
+    // service_health is forwarded WHOLE, including its `available` flag —
+    // projecting only the agent list would turn "we could not read /stats" into
+    // "no agents are unhealthy", which is the false green this system exists to
+    // avoid.
+    out.service_health = w.service_health;
+    out.agent_tech = w.agent_tech ?? [];
+    out.tool_latency = w.tool_latency;
   }
   if (rank >= 3) {
     out.alerts = w.alerts ?? [];
