@@ -6,6 +6,7 @@
   "type": "module",
   "packageManager": "pnpm@10.6.4",
   "scripts": {
+    "test": "node --test 'tests/**/*.test.ts'",
     "package": "node scripts/package.mjs",
     "package:check": "node scripts/package.mjs --dry-run",
     "dev-install": "node scripts/dev-install.mjs"
