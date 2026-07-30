@@ -58,6 +58,14 @@ function applyTier(w: Record<string, unknown>, tier: Tier): Record<string, unkno
     out.active_alerts = w.active_alerts;
     out.issues_opened = w.issues_opened;
     out.alerts_triggered = w.alerts_triggered;
+    // T1, deliberately, and this placement is the whole point of the field.
+    // The hub used to read incident grades off the T3 `alerts` list, which made a
+    // tenant's severity depend on how much it disclosed: the same High incident
+    // scored Sev1 at T3 and Sev2 at T1. Health must not change with disclosure.
+    // This is four integers — {High, Medium, Low, Unknown} — with no incident
+    // names and no timestamps, so it is safe to send one tier below the detail it
+    // summarises.
+    out.active_alerts_by_severity = w.active_alerts_by_severity;
   }
   if (rank >= 2) {
     out.agents = w.agents ?? [];
