@@ -23,7 +23,24 @@ const COLLECT_URL =
 // Public namespace marker the collector checks to reject random noise. NOT a
 // secret — shipped in the (public) plugin; must equal the collector's
 // GLOBAL_MONITORING_PUSH_KEY.
+//
+// It is a FALLBACK now. Because every tenant sends the same published string, the
+// collector could only take a tenant's identity from the request body — so any
+// holder could push as any tenant and overwrite its status. Set the optional
+// GM_PUSH_KEY secret to this tenant's own value and the collector derives identity
+// from the key instead, at which point nobody else can write this tenant's row.
 const PUSH_TOKEN = "global-monitoring-public-collect-v1";
+
+// This tenant's own push credential, if it has been provisioned. Optional by
+// design: an unprovisioned tenant keeps working on the shared marker rather than
+// going dark the moment the hub upgrades.
+function ownPushKey(context: Context): string | undefined {
+  const raw = context.secrets.get("GM_PUSH_KEY");
+  if (typeof raw === "string" && raw.trim()) return raw.trim();
+  const obj = raw as Record<string, unknown> | null;
+  const v = obj?.token ?? obj?.api_key ?? (obj?.value as Record<string, unknown> | undefined)?.token ?? (obj?.value as Record<string, unknown> | undefined)?.api_key;
+  return typeof v === "string" && v.trim() ? v.trim() : undefined;
+}
 
 // Log to the function run log (guarded so a missing console never breaks a push).
 function log(msg: string, extra?: unknown): void {
@@ -153,6 +170,21 @@ async function userFunction(context: Context): Promise<Result> {
   if (base !== rawBase.trim()) log("normalized self-read base url", { from: rawBase, to: base });
   log("start", { tenant: tenantLabel, tier, base });
 
+  // context.secrets.get throws for a missing secret on some platform versions, so
+  // read it the same defensive way the globals are read.
+  let pushKey = PUSH_TOKEN;
+  let pushKeyMode = "shared";
+  try {
+    const own = ownPushKey(context);
+    if (own) {
+      pushKey = own;
+      pushKeyMode = "own";
+    }
+  } catch {
+    /* not provisioned — the shared marker still works */
+  }
+  log("push credential", { mode: pushKeyMode });
+
   const now = Date.now();
   const ranges: RangeKey[] = ["week", "last7", "last30", "all"];
   // Resilient: one failing window must not sink the whole push. fetchTenantStatus
@@ -223,7 +255,7 @@ async function userFunction(context: Context): Promise<Result> {
     res = (await fetch(COLLECT_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: tenantLabel, payload, api_key: PUSH_TOKEN }),
+      body: JSON.stringify({ id: tenantLabel, payload, api_key: pushKey }),
     })) as unknown as typeof res;
   } catch (e) {
     logErr("push transport error", String(e));
@@ -261,6 +293,7 @@ async function userFunction(context: Context): Promise<Result> {
     tier,
     pushed_at: now,
     pushed_windows: ranges,
+    push_key_mode: pushKeyMode,
     summary,
     self_read_errors: 0,
     errors: [], // green success ⇒ zero read errors (any error would have thrown above)
