@@ -1,38 +1,33 @@
 # Global Monitoring — Push Template
 
-A pub/sub template for the Global Monitoring dashboard: instead of the
-dashboard pulling a tenant's data with a read-only key, this tenant pushes
-its own status out on a schedule.
+Install this plugin on **each monitored tenant**. It creates one enabled
+`monitoring_push` cron that reads the tenant locally, applies the configured
+sharing tier, and sends a snapshot to the Global Monitoring hub every five
+minutes.
 
-## What you get on install
+## Required configuration
 
-| Entity | What it does |
+| Setting | Value |
 | --- | --- |
-| `push_alerts_assistant_status` (cronjob) | Hourly: reads this tenant's own interactions/issues/alerts, POSTs a summary to germany-internal's `collect_tenant_status` endpoint |
+| Secret `SERVICE_MONITORING_TOKEN` | A read token for this same tenant |
+| Global `gm_self_api_url` | This tenant's API base URL, for example `https://tenant.api.example.wonderful.ai` |
+| Global `gm_tenant_label` | The label shown on the hub dashboard |
+
+Optional global `gm_tier` controls disclosure (`T0`–`T3`, default `T3`). For
+authenticated tenant identity, set secret `GM_PUSH_KEY` here, mirror it as
+`GM_PUSH_KEY_<TENANT_SLUG>` on the hub, and add the tenant label to the hub's
+`gm_push_tenants` global.
 
 ## Data flow
 
-```
-push_alerts_assistant_status (cronjob, hourly)
-        │
-        │  reads own tenant via FDE_SELF_READ_API_KEY
-        ▼
-   (this tenant's own communications/issues/alerts)
-        │
-        │  POST + shared GLOBAL_MONITORING_PUSH_KEY
-        ▼
-germany-internal: collect_tenant_status → pushed_tenant_status table
-        │
-        ▼
-germany-internal: global-monitoring-status → dashboard
+```text
+monitored tenant: monitoring_push (*/5 * * * *)
+        -> public collect_tenant_status endpoint on the hub
+        -> pushed_tenant_status + pushed_status_history
+        -> global_monitoring_status -> Global Monitoring app
 ```
 
-## Reusing this for another tenant
-
-1. Install this plugin on the tenant.
-2. Create its own `FDE_SELF_READ_API_KEY`-equivalent secret (a read key for that tenant's own data).
-3. Create the same `GLOBAL_MONITORING_PUSH_KEY` value germany-internal already has.
-4. Set `self_api_url` and `global_monitoring_collect_url` global variables.
-5. Change the hardcoded `TENANT_LABEL` in `code.ts` to that tenant's real name.
-
-No changes needed on the germany-internal (collecting) side — it discovers pushed tenants dynamically from the table.
+After installation, verify that `monitoring_push` exists under Resources →
+Functions → Cron, is enabled, and that the hub receives a new snapshot within
+five minutes. An "installed" Catalog record is not sufficient evidence: if the
+cron resource is absent, reinstall this plugin on the monitored tenant.
