@@ -1,5 +1,9 @@
 # Wonderful Plugin Template
 
+> This repository is the per-tenant producer. Install it on each monitored
+> tenant; install `global-monitoring-plugin` only on the central hub. See the
+> hub repository's `OPERATIONS.md` for the complete topology and recovery flow.
+
 Minimal starter for building a **Wonderful Marketplace plugin**.
 
 ## What you get
