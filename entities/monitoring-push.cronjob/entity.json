@@ -6,5 +6,5 @@
     { "cron_expression": "*/5 * * * *", "enabled": true }
   ],
   "is_enabled": true,
-  "timeout_ms": 30000
+  "timeout_ms": 90000
 }
