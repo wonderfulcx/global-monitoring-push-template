@@ -12,6 +12,6 @@
     "dev-install": "node scripts/dev-install.mjs"
   },
   "devDependencies": {
-    "adm-zip": "^0.5.16"
+    "adm-zip": "^0.6.1"
   }
 }
